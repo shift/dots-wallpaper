@@ -71,8 +71,8 @@ let
 
     ${pieImageCombinerApp}/bin/dots-wallpaper \
       "$OUTPUT_PATH" \
-      20 \
       "${toString cfg.width}x${toString cfg.height}" \
+      20 \
       "''${wallpapers[@]}"
       
     # Update stylix to use the new wallpaper
