@@ -1,0 +1,16 @@
+[package]
+name = "dots-wallpaper"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# The core dependency for all image processing tasks.
+image = "0.24.8"
+
+[dev-dependencies]
+# Used to create temporary directories and files for testing purposes.
+# This ensures our tests don't leave artifacts on the file system.
+tempfile = "3.8.1"
+
