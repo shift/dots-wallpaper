@@ -20,7 +20,7 @@ let
     set -euo pipefail
 
     # Set up variables
-    OUTPUT_PATH="./system-wallpaper.png"
+    OUTPUT_PATH="/etc/nixos/wallpaper/system-wallpaper.png"
     DEFAULT_WALLPAPER="${toString cfg.defaultWallpaper}"
     FLAKE_ROOT_DEFAULT="${toString cfg.flakeRootDefault}"
 
