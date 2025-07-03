@@ -39,6 +39,11 @@
           inherit system overlays;
         };
 
+        # Import the NixOS testing framework
+        nixosTest = import (nixpkgs + "/nixos/lib/testing-python.nix") {
+          inherit system pkgs;
+        };
+
         # Get Git hash for the current repository state
         gitHash = if self ? rev then pkgs.lib.substring 0 7 self.rev else "dirty";
 
@@ -74,7 +79,7 @@
           build = dots-wallpaper;
           
           # VM test with comprehensive image format testing
-          vm-test = pkgs.nixos.runTest {
+          vm-test = nixosTest {
             name = "dots-wallpaper-vm-test";
             
             nodes.machine = { config, pkgs, ... }: {
@@ -251,7 +256,7 @@
           };
           
           # Test module configuration validation
-          vm-test-module-validation = pkgs.nixos.runTest {
+          vm-test-module-validation = nixosTest {
             name = "dots-wallpaper-module-validation";
             
             nodes.machine = { config, pkgs, ... }: {
@@ -291,7 +296,7 @@
           };
           
           # Test without stylix (should fail validation)
-          vm-test-stylix-requirement = pkgs.nixos.runTest {
+          vm-test-stylix-requirement = nixosTest {
             name = "dots-wallpaper-stylix-requirement";
             
             nodes.machine = { config, pkgs, ... }: {
