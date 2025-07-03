@@ -1,4 +1,5 @@
 {
+  self,
   config,
   lib,
   pkgs,
@@ -10,7 +11,7 @@ with lib;
 let
   cfg = config.dots.wallpaper;
 
-  pieImageCombinerApp = self.packages.${system}.dots-wallpaper;
+  pieImageCombinerApp = self.packages.${pkgs.system}.dots-wallpaper;
 
   wallpaperGeneratorScript = pkgs.writeShellScript "generate-wallpaper" ''
 
@@ -68,7 +69,7 @@ let
 
     echo "Generating combined wallpaper with ${toString cfg.width}x${toString cfg.height} dimensions"
 
-    ${pieImageCombinerApp} \
+    ${pieImageCombinerApp}/bin/dots-wallpaper \
       "$OUTPUT_PATH" \
       20 \
       "${toString cfg.width}x${toString cfg.height}" \
@@ -161,7 +162,7 @@ in
 
     # Make sure the tools we need are installed
     environment.systemPackages = [
-      pkgs.dots-wallpaper
+      pieImageCombinerApp 
     ];
   };
 }

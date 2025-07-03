@@ -12,7 +12,7 @@
       # Helper function to create a NixOS module with inputs
       nixosModule = { pkgs, lib, config, ... }:
         import ./nixos-module.nix {
-          inherit pkgs lib config;
+          inherit self pkgs lib config;
           package = self.packages.${pkgs.system}.dots-wallpaper;
         };
         
