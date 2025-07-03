@@ -1,4 +1,4 @@
-use image::{imageops, io::Reader as ImageReader, RgbImage};
+use image::{imageops, ImageReader, RgbImage};
 use std::env;
 use std::error::Error;
 use std::process;
@@ -126,7 +126,7 @@ fn create_angled_strip_wallpaper(
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 5 {
+    if args.len() < 4 {
         eprintln!("Usage: {} <output_path> <width>x<height> <angle_degrees> [wallpaper_path1] ...", args[0]);
         eprintln!("Example: {} ./output.png 1920x1080 20 ./img1.jpg ./img2.jpg", args[0]);
         process::exit(1);
@@ -154,7 +154,7 @@ fn main() {
         process::exit(1);
     });
 
-    let paths_arg = &args[4..];
+    let paths_arg = if args.len() > 4 { &args[4..] } else { &[] };
 
     if let Err(e) = create_angled_strip_wallpaper(output_arg, resolution_arg, angle_arg, paths_arg) {
         eprintln!("Application error: {}", e);
@@ -281,6 +281,252 @@ mod tests {
         assert_eq!(*output_img.get_pixel(51, 75), bg);
         assert_eq!(*output_img.get_pixel(25, 50), fg);
         assert_eq!(*output_img.get_pixel(25, 51), bg);
+    }
+
+    // ===== ROBUSTNESS TESTS =====
+
+    #[test]
+    fn test_invalid_image_paths() {
+        let dir = tempdir().unwrap();
+        let output_path = dir.path().join("output.png");
+        let output_path_str = output_path.to_str().unwrap();
+
+        // Test with non-existent files
+        let paths = vec![
+            "/non/existent/path.jpg".to_string(),
+            "/another/invalid/path.png".to_string(),
+        ];
+
+        // Should succeed and create a black image (no valid images)
+        create_angled_strip_wallpaper(output_path_str, (100, 100), 0.0, &paths).unwrap();
+
+        let output_img = image::open(&output_path).unwrap().to_rgb8();
+        assert_eq!(output_img.dimensions(), (100, 100));
+        assert_eq!(*output_img.get_pixel(50, 50), Rgb([0, 0, 0]));
+    }
+
+    #[test]
+    fn test_corrupt_image_files() {
+        let dir = tempdir().unwrap();
+        let output_path = dir.path().join("output.png");
+        let output_path_str = output_path.to_str().unwrap();
+
+        // Create corrupt files
+        let corrupt1 = dir.path().join("corrupt1.jpg");
+        let corrupt2 = dir.path().join("corrupt2.png");
+        let empty_file = dir.path().join("empty.gif");
+        let text_file = dir.path().join("notimage.bmp");
+
+        // Write invalid data
+        std::fs::write(&corrupt1, b"This is not an image").unwrap();
+        std::fs::write(&corrupt2, b"\x89PNG\r\n\x1a\nINVALID").unwrap(); // Invalid PNG header
+        std::fs::write(&empty_file, b"").unwrap(); // Empty file
+        std::fs::write(&text_file, b"Just some text pretending to be an image").unwrap();
+
+        let paths = vec![
+            corrupt1.to_str().unwrap().to_string(),
+            corrupt2.to_str().unwrap().to_string(),
+            empty_file.to_str().unwrap().to_string(),
+            text_file.to_str().unwrap().to_string(),
+        ];
+
+        // Should succeed and create a black image (no valid images)
+        create_angled_strip_wallpaper(output_path_str, (100, 100), 0.0, &paths).unwrap();
+
+        let output_img = image::open(&output_path).unwrap().to_rgb8();
+        assert_eq!(output_img.dimensions(), (100, 100));
+        assert_eq!(*output_img.get_pixel(50, 50), Rgb([0, 0, 0]));
+    }
+
+    #[test]
+    fn test_major_image_formats() {
+        let dir = tempdir().unwrap();
+        let output_path = dir.path().join("output.png");
+        let output_path_str = output_path.to_str().unwrap();
+
+        let red = Rgb([255, 0, 0]);
+        let green = Rgb([0, 255, 0]);
+        let blue = Rgb([0, 0, 255]);
+
+        // Create images in different formats
+        let png_path = dir.path().join("test.png");
+        let jpg_path = dir.path().join("test.jpg"); 
+        let bmp_path = dir.path().join("test.bmp");
+
+        // Create test images in different formats
+        let img = RgbImage::from_pixel(50, 50, red);
+        img.save_with_format(&png_path, image::ImageFormat::Png).unwrap();
+        
+        let img2 = RgbImage::from_pixel(50, 50, green);
+        img2.save_with_format(&jpg_path, image::ImageFormat::Jpeg).unwrap();
+        
+        let img3 = RgbImage::from_pixel(50, 50, blue);
+        img3.save_with_format(&bmp_path, image::ImageFormat::Bmp).unwrap();
+
+        // Note: GIF and TIFF need specific handling for RGB, so we'll test with what we can create
+        let paths = vec![
+            png_path.to_str().unwrap().to_string(),
+            jpg_path.to_str().unwrap().to_string(),
+            bmp_path.to_str().unwrap().to_string(),
+        ];
+
+        create_angled_strip_wallpaper(output_path_str, (150, 150), 0.0, &paths).unwrap();
+
+        let output_img = image::open(&output_path).unwrap().to_rgb8();
+        assert_eq!(output_img.dimensions(), (150, 150));
+        // Should have successfully processed at least the first image
+        // We don't test exact pixel values due to JPEG compression artifacts
+    }
+
+    #[test]
+    fn test_edge_case_image_sizes() {
+        let dir = tempdir().unwrap();
+        let output_path = dir.path().join("output.png");
+        let output_path_str = output_path.to_str().unwrap();
+
+        // Test very small image (1x1)
+        let tiny_path = dir.path().join("tiny.png");
+        let mut tiny_img = RgbImage::new(1, 1);
+        tiny_img.put_pixel(0, 0, Rgb([255, 0, 0]));
+        tiny_img.save_with_format(&tiny_path, image::ImageFormat::Png).unwrap();
+
+        // Test non-square image
+        let rect_path = dir.path().join("rect.png");
+        let rect_img = RgbImage::from_pixel(200, 50, Rgb([0, 255, 0]));
+        rect_img.save_with_format(&rect_path, image::ImageFormat::Png).unwrap();
+
+        let paths = vec![
+            tiny_path.to_str().unwrap().to_string(),
+            rect_path.to_str().unwrap().to_string(),
+        ];
+
+        create_angled_strip_wallpaper(output_path_str, (100, 100), 0.0, &paths).unwrap();
+
+        let output_img = image::open(&output_path).unwrap().to_rgb8();
+        assert_eq!(output_img.dimensions(), (100, 100));
+    }
+
+    #[test]
+    fn test_large_image() {
+        let dir = tempdir().unwrap();
+        let output_path = dir.path().join("output.png");
+        let output_path_str = output_path.to_str().unwrap();
+
+        // Test reasonably large image (not too large to avoid memory issues in CI)
+        let large_path = dir.path().join("large.png");
+        let large_img = RgbImage::from_pixel(1000, 1000, Rgb([128, 128, 128]));
+        large_img.save_with_format(&large_path, image::ImageFormat::Png).unwrap();
+
+        let paths = vec![large_path.to_str().unwrap().to_string()];
+
+        create_angled_strip_wallpaper(output_path_str, (200, 200), 0.0, &paths).unwrap();
+
+        let output_img = image::open(&output_path).unwrap().to_rgb8();
+        assert_eq!(output_img.dimensions(), (200, 200));
+    }
+
+    #[test]
+    fn test_images_with_transparency() {
+        let dir = tempdir().unwrap();
+        let output_path = dir.path().join("output.png");
+        let output_path_str = output_path.to_str().unwrap();
+
+        // Create an RGBA image with transparency
+        let rgba_path = dir.path().join("transparent.png");
+        let rgba_img = image::RgbaImage::from_pixel(100, 100, image::Rgba([255, 0, 0, 128])); // Semi-transparent red
+        rgba_img.save_with_format(&rgba_path, image::ImageFormat::Png).unwrap();
+
+        let paths = vec![rgba_path.to_str().unwrap().to_string()];
+
+        // Should handle transparency by converting to RGB
+        create_angled_strip_wallpaper(output_path_str, (100, 100), 0.0, &paths).unwrap();
+
+        let output_img = image::open(&output_path).unwrap().to_rgb8();
+        assert_eq!(output_img.dimensions(), (100, 100));
+        // Transparency should be handled (converted to RGB)
+    }
+
+    #[test]
+    fn test_duplicate_images() {
+        let dir = tempdir().unwrap();
+        let output_path = dir.path().join("output.png");
+        let output_path_str = output_path.to_str().unwrap();
+
+        let image_path = dir.path().join("test.png");
+        create_dummy_image(&image_path, 100, 100, Rgb([255, 0, 0]));
+
+        // Use the same image multiple times
+        let paths = vec![
+            image_path.to_str().unwrap().to_string(),
+            image_path.to_str().unwrap().to_string(),
+            image_path.to_str().unwrap().to_string(),
+        ];
+
+        create_angled_strip_wallpaper(output_path_str, (150, 150), 0.0, &paths).unwrap();
+
+        let output_img = image::open(&output_path).unwrap().to_rgb8();
+        assert_eq!(output_img.dimensions(), (150, 150));
+        // Should handle duplicates fine
+    }
+
+    #[test]
+    fn test_mixed_valid_invalid_images() {
+        let dir = tempdir().unwrap();
+        let output_path = dir.path().join("output.png");
+        let output_path_str = output_path.to_str().unwrap();
+
+        // Create one valid image
+        let valid_path = dir.path().join("valid.png");
+        create_dummy_image(&valid_path, 100, 100, Rgb([0, 255, 0]));
+
+        // Create one invalid file
+        let invalid_path = dir.path().join("invalid.jpg");
+        std::fs::write(&invalid_path, b"Not an image").unwrap();
+
+        let paths = vec![
+            invalid_path.to_str().unwrap().to_string(), // Invalid first
+            valid_path.to_str().unwrap().to_string(),   // Valid second
+            "/non/existent.png".to_string(),            // Non-existent third
+        ];
+
+        create_angled_strip_wallpaper(output_path_str, (100, 100), 0.0, &paths).unwrap();
+
+        let output_img = image::open(&output_path).unwrap().to_rgb8();
+        assert_eq!(output_img.dimensions(), (100, 100));
+        // Should process the one valid image successfully
+        assert_eq!(*output_img.get_pixel(50, 50), Rgb([0, 255, 0]));
+    }
+
+    #[test]
+    fn test_ordering_preservation() {
+        let dir = tempdir().unwrap();
+        let output_path = dir.path().join("output.png");
+        let output_path_str = output_path.to_str().unwrap();
+
+        // Create images with distinct colors
+        let red_path = dir.path().join("red.png");
+        let green_path = dir.path().join("green.png");
+        let blue_path = dir.path().join("blue.png");
+
+        create_dummy_image(&red_path, 100, 100, Rgb([255, 0, 0]));
+        create_dummy_image(&green_path, 100, 100, Rgb([0, 255, 0]));
+        create_dummy_image(&blue_path, 100, 100, Rgb([0, 0, 255]));
+
+        let paths = vec![
+            red_path.to_str().unwrap().to_string(),
+            green_path.to_str().unwrap().to_string(),
+            blue_path.to_str().unwrap().to_string(),
+        ];
+
+        create_angled_strip_wallpaper(output_path_str, (300, 100), 0.0, &paths).unwrap();
+
+        let output_img = image::open(&output_path).unwrap().to_rgb8();
+        assert_eq!(output_img.dimensions(), (300, 100));
+        
+        // Check that ordering is preserved (left to right for 0-degree angle)
+        assert_eq!(*output_img.get_pixel(50, 50), Rgb([255, 0, 0]));  // Left: red
+        assert_eq!(*output_img.get_pixel(150, 50), Rgb([0, 255, 0])); // Middle: green  
+        assert_eq!(*output_img.get_pixel(250, 50), Rgb([0, 0, 255])); // Right: blue
     }
 }
 

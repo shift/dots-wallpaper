@@ -1,0 +1,36 @@
+[workspace]
+# Basic configuration for release-plz
+git_release_enable = true
+git_tag_enable = true
+git_push_enable = true
+
+# Package configuration
+[[package]]
+name = "dots-wallpaper"
+# changelog_path = "CHANGELOG.md"
+# changelog_include = ["added", "changed", "deprecated", "removed", "fixed", "security"]
+
+[changelog]
+header = """
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+"""
+body = """
+{% if version -%}
+    ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+    ## [unreleased]
+{% endif -%}
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | striptags | trim | upper_first }}
+    {% for commit in commits %}
+        - {{ commit.message | upper_first }}
+    {%- endfor %}
+{% endfor %}\n
+"""
+# remove the leading and trailing whitespace from the template
+trim = true

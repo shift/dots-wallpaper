@@ -1,0 +1,72 @@
+name: Changelog
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  changelog:
+    name: Generate changelog preview
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate changelog
+        run: |
+          git-cliff --config cliff.toml --unreleased --strip header > CHANGELOG_PREVIEW.md
+
+      - name: Comment changelog preview
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let changelog = '';
+            try {
+              changelog = fs.readFileSync('CHANGELOG_PREVIEW.md', 'utf8');
+            } catch (err) {
+              changelog = 'No notable changes in this PR.';
+            }
+            
+            const body = `## 📝 Changelog Preview
+            
+            ${changelog}
+            
+            *This preview is automatically generated based on conventional commits.*`;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const existingComment = comments.find(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.includes('📝 Changelog Preview')
+            );
+            
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
