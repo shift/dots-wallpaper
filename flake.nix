@@ -106,6 +106,71 @@
             
             touch $out
           '';
+          
+          # Simplified VM test without complex dependencies
+          vm-test = pkgs.nixosTest {
+            name = "dots-wallpaper-basic";
+            
+            nodes.machine = { config, pkgs, ... }: {
+              environment.systemPackages = [ dots-wallpaper pkgs.imagemagick ];
+              # Minimal system without complex dependencies
+              virtualisation.memorySize = 1024;
+            };
+            
+            testScript = ''
+              machine.start()
+              machine.wait_for_unit("multi-user.target")
+              
+              # Create test image
+              machine.succeed("${pkgs.imagemagick}/bin/convert -size 100x100 xc:blue /tmp/test.png")
+              
+              # Test binary functionality
+              machine.succeed("${dots-wallpaper}/bin/dots-wallpaper /tmp/out.png 200x200 0 /tmp/test.png")
+              machine.succeed("test -f /tmp/out.png")
+              
+              # Test with no images  
+              machine.succeed("${dots-wallpaper}/bin/dots-wallpaper /tmp/empty.png 100x100 0")
+              machine.succeed("test -f /tmp/empty.png")
+            '';
+          };
+          
+          # Module validation test
+          vm-test-module-validation = pkgs.nixosTest {
+            name = "dots-wallpaper-module";
+            
+            nodes.machine = { config, pkgs, ... }: {
+              imports = [ self.nixosModules.default ];
+              
+              # Basic module test without stylix dependency
+              dots.wallpaper = {
+                enable = false;  # Test with disabled module
+                width = 1920;
+                height = 1080;
+              };
+              
+              environment.systemPackages = [ dots-wallpaper ];
+            };
+            
+            testScript = ''
+              machine.start()
+              machine.wait_for_unit("multi-user.target")
+              
+              # Verify module loaded without errors
+              machine.succeed("which dots-wallpaper")
+            '';
+          };
+          
+          # Stylix requirement test - simplified
+          vm-test-stylix-requirement = pkgs.runCommand "stylix-requirement-check" {} ''
+            # Simple test that checks module syntax without actual VM
+            echo "Checking module structure..."
+            
+            # This is a placeholder for a proper stylix requirement test
+            # For now, just verify the module file exists and is valid
+            test -f ${./nixos-module.nix}
+            
+            touch $out
+          '';
         
           # TODO: VM tests are complex and require proper stylix integration
           # For now, we use simpler integration tests above
