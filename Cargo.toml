@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 # The core dependency for all image processing tasks.
-image = "0.24.8"
+image = "0.25.0"
 
 [dev-dependencies]
 # Used to create temporary directories and files for testing purposes.
